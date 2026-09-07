@@ -53,21 +53,64 @@ function StatPips({ value }: { value: number }) {
   return <div className="stat-pips">{[1, 2, 3, 4, 5].map((pip) => <i key={pip} className={pip <= value ? "active" : ""} />)}</div>;
 }
 
-function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinish }: {
+function Joystick({ onVector }: { onVector: (x: number, y: number) => void }) {
+  const baseRef = useRef<HTMLDivElement>(null);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const activeId = useRef<number | null>(null);
+
+  const update = (event: React.PointerEvent) => {
+    const base = baseRef.current;
+    if (!base) return;
+    const rect = base.getBoundingClientRect();
+    const radius = rect.width / 2;
+    let dx = (event.clientX - (rect.left + radius)) / radius;
+    let dy = (event.clientY - (rect.top + radius)) / radius;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) { dx /= len; dy /= len; }
+    setKnob({ x: dx * radius * 0.55, y: dy * radius * 0.55 });
+    onVector(dx, dy);
+  };
+
+  const release = () => { activeId.current = null; setKnob({ x: 0, y: 0 }); onVector(0, 0); };
+
+  return (
+    <div
+      ref={baseRef}
+      className="joystick"
+      role="application"
+      aria-label="Steering joystick"
+      onPointerDown={(event) => { activeId.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId); update(event); }}
+      onPointerMove={(event) => { if (activeId.current === event.pointerId) update(event); }}
+      onPointerUp={release}
+      onPointerCancel={release}
+    >
+      <span className="joystick-ring" />
+      <span className="joystick-knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
+    </div>
+  );
+}
+
+function GameCanvas({ selectedCharacter, selectedDrill, paused, soundOn, onStats, onFinish }: {
   selectedCharacter: CharacterId;
   selectedDrill: DrillId;
   paused: boolean;
+  soundOn: boolean;
   onStats: (stats: GameStats) => void;
   onFinish: (stats: GameStats) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const keys = useRef({ left: false, right: false, up: false, down: false });
-  const touch = useRef(keys.current);
+  const stick = useRef({ x: 0, y: 0 });
   const finishRef = useRef(false);
 
   const setInput = (key: keyof typeof keys.current, value: boolean) => {
     keys.current[key] = value;
   };
+
+  useEffect(() => {
+    startDrillLoop();
+    return () => stopDrillLoop();
+  }, []);
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -96,7 +139,7 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinis
     let frame = 0;
     let start = performance.now();
     let previous = start;
-    const player = { x: 0.5, depth: 0, targetDepth: 0 };
+    const player = { x: 0.5, depth: 0, targetDepth: 0, vx: 0, vy: 0, angle: 0 };
     const rivals = [
       { x: 0.25, depth: 8, speed: 4.8, name: selectedCharacter === "mia" ? "Alex" : "Mia", color: "#ff5a80" },
       { x: 0.76, depth: 4, speed: 4.25, name: "Robo", color: "#40d8ff" },
@@ -105,6 +148,7 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinis
     const char = characters.find((item) => item.id === selectedCharacter) ?? characters[0];
     const stats: GameStats = { score: 0, stars: 0, gems: 0, depth: 0, combo: 1, time: 60 };
     let collectionStep = 0;
+    let alarmed = false;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -123,14 +167,17 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinis
       ctx.save(); ctx.translate(x, y); ctx.shadowColor = color; ctx.shadowBlur = 14; ctx.fillStyle = color;
       ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size * .7, -size * .25); ctx.lineTo(size * .45, size); ctx.lineTo(-size * .45, size); ctx.lineTo(-size * .7, -size * .25); ctx.closePath(); ctx.fill(); ctx.restore();
     };
-    const drawDrill = (x: number, y: number, color: string, label: string, isPlayer = false) => {
-      ctx.save(); ctx.translate(x, y); if (isPlayer) { ctx.shadowColor = "#ffc400"; ctx.shadowBlur = 18; }
+    const drawDrill = (x: number, y: number, color: string, label: string, isPlayer = false, angle = 0) => {
+      ctx.save(); ctx.translate(x, y);
       ctx.fillStyle = "rgba(2,10,22,.5)"; ctx.beginPath(); ctx.ellipse(0, 23, 39, 10, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.rotate(angle);
+      if (isPlayer) { ctx.shadowColor = "#ffc400"; ctx.shadowBlur = 18; }
       ctx.fillStyle = color; rounded(-34, -15, 54, 35, 10);
       ctx.fillStyle = "#10203a"; rounded(-28, 12, 48, 14, 6);
       ctx.fillStyle = "#a9dfff"; rounded(-8, -28, 24, 18, 6);
       ctx.fillStyle = "#e6edf5"; ctx.beginPath(); ctx.moveTo(18, -13); ctx.lineTo(58, 3); ctx.lineTo(18, 19); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#71839a"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(27, -8); ctx.lineTo(46, 13); ctx.moveTo(27, 14); ctx.lineTo(47, -6); ctx.stroke();
+      ctx.restore();
       ctx.shadowBlur = 0; ctx.fillStyle = isPlayer ? "#ffc400" : "#07182f"; rounded(-28, -48, 56, 17, 8);
       ctx.fillStyle = isPlayer ? "#10203a" : "#f4f8ff"; ctx.font = "800 10px Arial"; ctx.textAlign = "center"; ctx.fillText(label.toUpperCase(), 0, -36); ctx.restore();
     };
@@ -140,17 +187,29 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinis
       const h = canvas.clientHeight;
       const dt = Math.min((now - previous) / 1000, .05);
       previous = now;
+      const edge = Math.min(0.42, 68 / Math.max(w, 1));
       if (!paused) {
         const elapsed = (now - start) / 1000;
         stats.time = Math.max(0, 60 - elapsed);
         const input = keys.current;
-        const horizontal = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-        const vertical = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-        player.x = Math.max(.08, Math.min(.92, player.x + horizontal * dt * (.19 + drill.speed * .017)));
-        player.targetDepth = Math.max(0, player.targetDepth + vertical * dt * (7 + drill.power * 1.1));
+        const keyH = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        const keyV = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+        const horizontal = Math.max(-1, Math.min(1, keyH + stick.current.x));
+        const vertical = Math.max(-1, Math.min(1, keyV + stick.current.y));
+        // smooth steering: accelerate toward the requested direction, ease back to rest
+        const accel = 5.4 + drill.speed * .5;
+        player.vx += (horizontal * (.2 + drill.speed * .018) - player.vx) * Math.min(1, dt * accel);
+        player.vy += (vertical * (7 + drill.power * 1.1) - player.vy) * Math.min(1, dt * (accel * .8));
+        player.x = Math.max(edge, Math.min(1 - edge, player.x + player.vx * dt));
+        if (player.x <= edge || player.x >= 1 - edge) player.vx *= .25;
+        player.targetDepth = Math.max(0, player.targetDepth + player.vy * dt);
         player.depth += (player.targetDepth - player.depth) * Math.min(1, dt * 6);
-        if (!input.left && !input.right && !input.up && !input.down) player.targetDepth += dt * 2.1;
-        rivals.forEach((rival, index) => { rival.depth += dt * rival.speed * (index ? .95 : 1.05) + Math.sin(now / 900 + index) * dt; rival.x += Math.sin(now / 1400 + index * 3) * dt * .015; });
+        const idle = Math.abs(horizontal) < .08 && Math.abs(vertical) < .08;
+        if (idle) player.targetDepth += dt * 2.1;
+        const targetAngle = Math.max(-.75, Math.min(.75, Math.atan2(vertical * .9, Math.abs(horizontal) < .05 ? 1.6 : Math.abs(horizontal) * 1.6) * (horizontal < 0 ? -1 : 1) * (Math.abs(horizontal) < .05 ? Math.sign(vertical) || 0 : 1)));
+        player.angle += (targetAngle - player.angle) * Math.min(1, dt * 7);
+        setDrillIntensity(Math.min(1, Math.abs(player.vy) / 9 + Math.abs(player.vx) * 1.6));
+        rivals.forEach((rival, index) => { rival.depth += dt * rival.speed * (index ? .95 : 1.05) + Math.sin(now / 900 + index) * dt; rival.x += Math.sin(now / 1400 + index * 3) * dt * .015; rival.x = Math.max(edge, Math.min(1 - edge, rival.x)); });
         const step = Math.floor(player.depth / 7);
         if (step > collectionStep) {
           collectionStep = step;
@@ -159,12 +218,15 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinis
           stats.gems += gem ? 1 : 0;
           stats.combo = Math.min(8, stats.combo + 1);
           stats.score += gem ? 100 : 10 * stats.combo;
+          if (gem) sfx.gem(); else sfx.star();
         }
         stats.depth = Math.floor(player.depth);
+        if (stats.time <= 10 && !alarmed) { alarmed = true; sfx.alarm(); }
         if (Math.floor(now / 250) % 2 === 0) onStats({ ...stats });
-        if (stats.time <= 0 && !finishRef.current) { finishRef.current = true; onFinish({ ...stats }); return; }
+        if (stats.time <= 0 && !finishRef.current) { finishRef.current = true; setDrillIntensity(0); onFinish({ ...stats }); return; }
       } else {
         start += now - previous;
+        setDrillIntensity(0);
       }
 
       const zone = player.depth > 140 ? "volcanic" : player.depth > 72 ? "crystal" : "dirt";
@@ -193,7 +255,7 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinis
       }
       const playerY = h * .54;
       rivals.forEach((rival, index) => drawDrill(rival.x * w, playerY + (rival.depth - player.depth) * 5 + (index ? 150 : -130), rival.color, rival.name));
-      drawDrill(player.x * w, playerY, selectedDrill === "speed" ? "#ff5578" : selectedDrill === "power" ? "#31bff1" : "#f0a712", `YOU · ${char.name}`, true);
+      drawDrill(player.x * w, playerY, selectedDrill === "speed" ? "#ff5578" : selectedDrill === "power" ? "#31bff1" : "#f0a712", `YOU · ${char.name}`, true, player.angle);
       if (stats.time <= 10) {
         ctx.fillStyle = "rgba(255,35,19,.16)"; ctx.fillRect(0, 0, w, h);
         ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "900 64px Impact, sans-serif"; ctx.fillText(String(Math.ceil(stats.time)), w / 2, h * .38);
@@ -201,30 +263,17 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, onStats, onFinis
       frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", resize); };
-  }, [onFinish, onStats, paused, selectedCharacter, selectedDrill]);
-
-  const controlProps = (key: keyof typeof keys.current) => ({
-    onPointerDown: () => setInput(key, true),
-    onPointerUp: () => setInput(key, false),
-    onPointerCancel: () => setInput(key, false),
-    onPointerLeave: () => setInput(key, false),
-  });
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", resize); setDrillIntensity(0); };
+  }, [onFinish, onStats, paused, selectedCharacter, selectedDrill, soundOn]);
 
   return (
     <>
       <canvas ref={canvasRef} className="game-canvas" aria-label="Drill War mine" />
-      <div className="touch-controls" aria-label="Movement controls">
-        <Button variant="control" size="iconGame" aria-label="Move left" {...controlProps("left")}><ArrowLeft /></Button>
-        <span className="touch-vertical">
-          <Button variant="control" size="iconGame" aria-label="Move up" {...controlProps("up")}><ArrowUp /></Button>
-          <Button variant="control" size="iconGame" aria-label="Drill down" {...controlProps("down")}><ArrowDown /></Button>
-        </span>
-        <Button variant="control" size="iconGame" aria-label="Move right" {...controlProps("right")}><ArrowRight /></Button>
-      </div>
+      <Joystick onVector={(x, y) => { stick.current.x = x; stick.current.y = y; }} />
     </>
   );
 }
+
 
 export function DrillWarGame() {
   const [screen, setScreen] = useState<Screen>("menu");
