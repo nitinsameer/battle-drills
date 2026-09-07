@@ -284,21 +284,27 @@ export function DrillWarGame() {
   const [sound, setSound] = useState(true);
   const [stats, setStats] = useState<GameStats>({ score: 0, stars: 0, gems: 0, depth: 0, combo: 1, time: 60 });
 
+  useEffect(() => { setSoundEnabled(sound); }, [sound]);
+
   useEffect(() => {
     if (screen !== "countdown") return;
     setCountdown(3);
+    sfx.countdown();
     let value = 3;
     const timer = window.setInterval(() => {
       value -= 1;
-      if (value <= 0) { window.clearInterval(timer); setScreen("game"); }
-      else setCountdown(value);
+      if (value <= 0) { window.clearInterval(timer); sfx.go(); setScreen("game"); }
+      else { setCountdown(value); sfx.countdown(); }
     }, 850);
     return () => window.clearInterval(timer);
   }, [screen]);
 
+  useEffect(() => { if (screen === "results") sfx.win(); }, [screen]);
+
   const finishGame = useCallback((finalStats: GameStats) => { setStats(finalStats); setScreen("results"); setPaused(false); }, []);
   const updateStats = useCallback((next: GameStats) => setStats(next), []);
-  const begin = () => setScreen("character");
+  const go = useCallback((next: Screen, sound: () => void = sfx.click) => { unlockAudio(); sound(); setScreen(next); }, []);
+  const begin = () => go("character", sfx.select);
 
   if (screen === "game") {
     const leaderboard = [
@@ -308,7 +314,8 @@ export function DrillWarGame() {
     ].sort((a, b) => b.score - a.score);
     return (
       <main className="game-screen">
-        <GameCanvas selectedCharacter={character} selectedDrill={drill} paused={paused} onStats={updateStats} onFinish={finishGame} />
+        <GameCanvas selectedCharacter={character} selectedDrill={drill} paused={paused} soundOn={sound} onStats={updateStats} onFinish={finishGame} />
+
         <div className="hud" aria-live="polite">
           <div className="hud-player"><span>{characters.find((c) => c.id === character)?.icon}</span><div><small>YOU · {character}</small><strong>{stats.score.toLocaleString()}</strong></div></div>
           <div className={`hud-timer ${stats.time <= 10 ? "danger" : ""}`}><small>TIME</small><strong>00:{Math.ceil(stats.time).toString().padStart(2, "0")}</strong></div>
