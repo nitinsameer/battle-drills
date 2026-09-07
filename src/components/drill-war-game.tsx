@@ -144,8 +144,8 @@ function GameCanvas({ selectedCharacter, selectedDrill, paused, soundOn, onStats
       { x: 0.25, depth: 8, speed: 4.8, name: selectedCharacter === "mia" ? "Alex" : "Mia", color: "#ff5a80" },
       { x: 0.76, depth: 4, speed: 4.25, name: "Robo", color: "#40d8ff" },
     ];
-    const drill = drills.find((item) => item.id === selectedDrill) ?? drills[0];
-    const char = characters.find((item) => item.id === selectedCharacter) ?? characters[0];
+    const drill = (drills.find((item) => item.id === selectedDrill) ?? drills[0])!;
+    const char = (characters.find((item) => item.id === selectedCharacter) ?? characters[0])!;
     const stats: GameStats = { score: 0, stars: 0, gems: 0, depth: 0, combo: 1, time: 60 };
     let collectionStep = 0;
     let alarmed = false;
