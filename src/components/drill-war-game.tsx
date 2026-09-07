@@ -338,7 +338,7 @@ export function DrillWarGame() {
       {screen === "menu" && <section className="menu-stage"><Brand /><p className="tagline">DIG DEEP <i /> COLLECT <i /> CONQUER</p><div className="menu-actions"><Button variant="arcade" size="hero" onClick={begin}><Play /> Start game</Button><div><Button variant="metal" size="lg" onClick={() => go("howto")}><BookOpen /> How to play</Button><Button variant="metal" size="lg" onClick={() => go("settings")}><Settings /> Settings</Button></div></div><span className="version">ARCADE EDITION · v1.0</span></section>}
 
       {screen === "howto" && <section className="panel-screen"><div className="panel-top"><Brand compact /><Button variant="control" size="iconGame" onClick={() => go("menu")} aria-label="Back to menu"><Home /></Button></div><h1>HOW TO PLAY</h1><div className="howto-grid">
-        <article><span className="key-cluster">W<br />A S D</span><h3>Move & drill</h3><p>Use WASD, arrow keys, or the touch controls to race underground.</p></article>
+        <article><span className="key-cluster">W<br />A S D</span><h3>Move & drill</h3><p>Use WASD, arrow keys, or the on-screen joystick to steer and dig.</p></article>
         <article><span className="how-icon">⭐ 💎</span><h3>Grab treasure</h3><p>Chain pickups to grow your combo and rocket up the leaderboard.</p></article>
         <article><span className="how-icon">⚡ 🧲</span><h3>Use power-ups</h3><p>Turbo, magnets, mega drills and shields turn the race around.</p></article>
         <article><span className="how-icon">💣 🔥</span><h3>Dodge danger</h3><p>Hard rock, bombs, bats and lava will slow down your run.</p></article>
