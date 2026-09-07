@@ -3,7 +3,6 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
-  ArrowUp,
   BookOpen,
   Gauge,
   Gem,
@@ -12,7 +11,6 @@ import {
   Play,
   RotateCcw,
   Settings,
-  Shield,
   Star,
   Trophy,
   Volume2,
@@ -22,10 +20,12 @@ import {
 
 import menuArt from "@/assets/drill-war-menu.jpg";
 import { Button } from "@/components/ui/button";
+import { setDrillIntensity, setSoundEnabled, sfx, startDrillLoop, stopDrillLoop, unlockAudio } from "@/lib/arcade-audio";
 
 type Screen = "menu" | "howto" | "settings" | "character" | "drill" | "countdown" | "game" | "results";
 type CharacterId = "alex" | "mia" | "robo";
 type DrillId = "mini" | "speed" | "power";
+
 
 const characters = [
   { id: "alex" as const, name: "Alex", icon: "🧑🏻‍🚀", trait: "Brave explorer", perk: "+10% star value", color: "bg-amber" },
